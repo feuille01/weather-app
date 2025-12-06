@@ -45,7 +45,7 @@
 ## ▶️ Как запустить
 1. Склонируй репозиторий:
 ```bash
-git clone 
+git clone https://github.com/feuille01/weather-app.git
 ```
 2. Получи API-ключи:
 - WeatherAPI → вставь в переменную API_KEY
