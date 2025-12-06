@@ -23,7 +23,7 @@
 
         label {
             display: inline-block;
-            width: 80px;
+            width: 70px;
         }
 
         input {
@@ -36,6 +36,15 @@
             color: white;
             border: none;
             cursor: pointer;
+        }
+
+        #refreshAllBtn {
+            padding: 10px 20px;
+            background: #2ecc71;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-left: auto;
         }
 
         #weatherContainer {
@@ -75,6 +84,7 @@
             margin-top: 10px;
             border: 1px solid #eee;
         }
+
         .delete-btn {
             position: absolute;
             top: 5px;
@@ -92,6 +102,7 @@
             align-items: center;
             z-index: 10;
         }
+
     </style>
 
     <script src="https://mapgl.2gis.com/api/js/v1"></script>
@@ -99,14 +110,15 @@
 <body>
     <div class="input-section"> 
         <div class="input-group">
-            <label for="latitude">Широта</label>
-            <input type="text" id="latitude" placeholder="Например: 56.8519">
+            <label for="latitude">Широта:</label>
+            <input type="text" id="latitude" placeholder="например: 56.8519">
         </div>
         <div class="input-group">
-            <label for="longitude">Долгота</label>
-            <input type="text" id="longitude" placeholder="Например: 60.6122">
+            <label for="longitude">Долгота:</label>
+            <input type="text" id="longitude" placeholder="например: 60.6122">
         </div>
         <button id="showWeatherBtn">Показать погоду</button>
+        <button id="refreshAllBtn">Обновить данные</button>
     </div>
 
     <div id="weatherContainer"></div>
@@ -162,7 +174,34 @@
                 center: [lon, lat],
                 zoom: 10,
             });
+        }
 
+        // Обновление погоды в виджете
+        function updateWeatherInWidget(widget, data) {
+            const current = data.current;
+            const location = data.location;
+
+            const content = widget.querySelector('.widget-content');
+            const h3 = content.querySelector('h3');
+            const iconImg = content.querySelector('.weather-icon img');
+            const temp = content.querySelector('p:nth-of-type(1)');
+            const feels = content.querySelector('p:nth-of-type(2)');
+            const weather = content.querySelector('p:nth-of-type(3)');
+            const humidity = content.querySelector('p:nth-of-type(4)');
+            const wind = content.querySelector('p:nth-of-type(5)');
+            const gust = content.querySelector('p:nth-of-type(6)');
+            const visibility = content.querySelector('p:nth-of-type(7)');
+
+            h3.textContent = `${location.name}, ${location.country}`;
+            iconImg.src = current.condition.icon;
+            iconImg.alt = current.condition.text;
+            temp.innerHTML = `<strong>Температура:</strong> ${current.temp_c}°C`;
+            feels.innerHTML = `<strong>Ощущается как:</strong> ${current.feelslike_c}°C`;
+            weather.innerHTML = `<strong>Погода:</strong> ${current.condition.text}`;
+            humidity.innerHTML = `<strong>Влажность:</strong> ${current.humidity}%`;
+            wind.innerHTML = `<strong>Ветер:</strong> ${(current.wind_kph / 3.6).toFixed(2)} м/с`;
+            gust.innerHTML = `<strong>Порывы до:</strong> ${(current.gust_kph / 3.6).toFixed(2)} м/с`;
+            visibility.innerHTML = `<strong>Видимость:</strong> ${current.vis_km} км`;
         }
 
         // Сохранение виджетов в localStorage
@@ -189,8 +228,10 @@
             const widget = document.createElement('div');
             widget.className = 'weather-widget';
             widget.dataset.weatherData = JSON.stringify(data);
-
-            // Уникальный ID для контейнера карты
+            // Сохранение координат
+            widget.dataset.latitude = location.lat;
+            widget.dataset.longitude = location.lon;
+            // Уникальный ID для карты
             const mapContainerId = 'map-' + generateId();
             widget.innerHTML = `
                 <button class="delete-btn" title="Удалить виджет">×</button>
@@ -222,7 +263,67 @@
             });
         }
 
-        // Обработчик кнопки
+        function showNotification() {
+            // Уведомление
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = 'Данные успешно обновлены!';
+
+            // Стили уведомления
+            notification.style.position = 'fixed';
+            notification.style.top = '20px';
+            notification.style.left = '50%';
+            notification.style.transform = 'translateX(-50%)';
+            notification.style.backgroundColor = '#2ecc71';
+            notification.style.color = 'white';
+            notification.style.padding = '10px 20px';
+            notification.style.borderRadius = '4px';
+            notification.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.2)';
+            notification.style.zIndex = '1000';
+            notification.style.opacity = '0';
+            notification.style.transition = 'opacity 0.3s ease';
+
+            // Добавление в DOM
+            document.body.appendChild(notification);
+
+            // Отображение
+            setTimeout(() => {
+                notification.style.opacity = '1';
+            }, 10);
+
+            // Исчезновение уведомления
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+        }
+
+        // Обработчик кнопки "Обновить данные"
+        document.getElementById('refreshAllBtn').addEventListener('click', async () => {
+            const widgets = document.querySelectorAll('.weather-widget');
+            for (const widget of widgets) {
+                const lat = parseFloat(widget.dataset.latitude);
+                const lon = parseFloat(widget.dataset.longitude);
+
+                if (isNaN(lat) || isNaN(lon)) continue;
+
+                try {
+                    const newData = await getWeather(lat, lon);
+                    widget.dataset.weatherData = JSON.stringify(newData);
+                    updateWeatherInWidget(widget, newData);
+                } catch (error) {
+                    console.error('Ошибка обновления погоды:', error);
+                }
+            }
+            saveWidgetsToLocalStorage();
+            showNotification();
+        });
+
+        // Обработчик кнопки "Показать погоду"
         document.getElementById('showWeatherBtn').addEventListener('click', async () => {
             const latInput = document.getElementById('latitude');
             const lonInput = document.getElementById('longitude');
@@ -249,6 +350,7 @@
                 renderWeatherWidget(data);
             });
         });
+        
     </script>
 </body>
 </html>
