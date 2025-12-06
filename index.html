@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Погода</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .input-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+        }
+
+        label {
+            display: inline-block;
+            width: 80px;
+        }
+
+        input {
+            padding: 5px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        #weatherContainer {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .weather-widget {
+            border: 1px solid #ccc;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            position: relative; 
+            min-height: 300px;
+        }
+
+        .widget-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .weather-header {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .weather-icon img {
+            width: 50px;
+            height: 50px;
+        }
+
+        .map-frame {
+            width: 100%;
+            height: 250px;
+            margin-top: 10px;
+            border: 1px solid #eee;
+        }
+        .delete-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            width: 20px;
+            height: 20px;
+            background-color: #ccc;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+    </style>
+
+    <script src="https://mapgl.2gis.com/api/js/v1"></script>
+</head>
+<body>
+    <div class="input-section"> 
+        <div class="input-group">
+            <label for="latitude">Широта</label>
+            <input type="text" id="latitude" placeholder="Например: 56.8519">
+        </div>
+        <div class="input-group">
+            <label for="longitude">Долгота</label>
+            <input type="text" id="longitude" placeholder="Например: 60.6122">
+        </div>
+        <button id="showWeatherBtn">Показать погоду</button>
+    </div>
+
+    <div id="weatherContainer"></div>
+
+    <script>
+        const API_KEY = '...';
+        const MAP_2GIS_KEY = '...';
+
+        // Генерация уникального ID для виджетов
+        function generateId() {
+            return Date.now() + Math.random().toString(36).substr(2, 9);
+        }
+
+        // Автоматическая замена запятых на точки
+        document.getElementById('latitude').addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/,/g, '.');
+        });
+        document.getElementById('longitude').addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/,/g, '.');
+        });
+
+        // Валидация координат
+        function validateCoordinates(latStr, lonStr) {
+            const lat = parseFloat(latStr);
+            const lon = parseFloat(lonStr);
+            if (isNaN(lat) || isNaN(lon)) {
+                return { isValid: false, error: 'Введите числовые значения' };
+            }
+            if (lat < -90 || lat > 90) {
+                return { isValid: false, error: 'Широта должна быть от -90 до 90' };
+            }
+            if (lon < -180 || lon > 180) {
+                return { isValid: false, error: 'Долгота должна быть от -180 до 180' };
+            }
+            return { isValid: true, lat, lon };
+        }
+
+        // Получение погоды
+        async function getWeather(lat, lon) {
+            const url = `https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${lat},${lon}&lang=ru&aqi=no`;
+            const response = await fetch(url);
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error?.message || 'Не удалось получить погоду');
+            }
+            return await response.json();
+        }
+
+        // Инициализация карты
+        function init2GISMap(containerId, lat, lon) {
+            new mapgl.Map(containerId, {
+                key: MAP_2GIS_KEY,
+                center: [lon, lat],
+                zoom: 10,
+            });
+
+        }
+
+        // Сохранение виджетов в localStorage
+        function saveWidgetsToLocalStorage() {
+            const container = document.getElementById('weatherContainer');
+            const widgets = container.querySelectorAll('.weather-widget');
+            const dataToSave = [];
+
+            widgets.forEach(w => {
+                const data = w.dataset.weatherData;
+                if (data) {
+                    dataToSave.push(JSON.parse(data));
+                }
+            });
+
+            localStorage.setItem('weatherWidgets', JSON.stringify(dataToSave));
+        }
+
+        // Отображение виджета погоды
+        function renderWeatherWidget(data) {
+            const current = data.current;
+            const location = data.location;
+
+            const widget = document.createElement('div');
+            widget.className = 'weather-widget';
+            widget.dataset.weatherData = JSON.stringify(data);
+
+            // Уникальный ID для контейнера карты
+            const mapContainerId = 'map-' + generateId();
+            widget.innerHTML = `
+                <button class="delete-btn" title="Удалить виджет">×</button>
+                <div class="widget-content">
+                    <h3>${location.name}, ${location.country}</h3>
+                    <div class="weather-icon"><img src="${current.condition.icon}" alt="${current.condition.text}"></div>
+                    <p><strong>Температура:</strong> ${current.temp_c}°C</p>
+                    <p><strong>Ощущается как:</strong> ${current.feelslike_c}°C</p>
+                    <p><strong>Погода:</strong> ${current.condition.text}</p>
+                    <p><strong>Влажность:</strong> ${current.humidity}%</p>
+                    <p><strong>Ветер:</strong> ${(current.wind_kph / 3.6).toFixed(2)} м/с</p>
+                    <p><strong>Порывы до:</strong> ${(current.gust_kph / 3.6).toFixed(2)} м/с</p>
+                    <p><strong>Видимость:</strong> ${current.vis_km} км</p>
+                    <div id="${mapContainerId}" class="map-frame"></div>
+                </div>
+            `;
+
+            document.getElementById('weatherContainer').appendChild(widget);
+
+            // Инициализация карты
+            setTimeout(() => {
+                init2GISMap(mapContainerId, location.lat, location.lon);
+            }, 0);
+
+            // Обработчик удаления
+            widget.querySelector('.delete-btn').addEventListener('click', () => {
+                widget.remove();
+                saveWidgetsToLocalStorage();
+            });
+        }
+
+        // Обработчик кнопки
+        document.getElementById('showWeatherBtn').addEventListener('click', async () => {
+            const latInput = document.getElementById('latitude');
+            const lonInput = document.getElementById('longitude');
+
+            const validationResult = validateCoordinates(latInput.value, lonInput.value);
+            if (!validationResult.isValid) {
+                alert(validationResult.error);
+                return;
+            }
+
+            try {
+                const weatherData = await getWeather(validationResult.lat, validationResult.lon);
+                renderWeatherWidget(weatherData);
+                saveWidgetsToLocalStorage();
+            } catch (error) {
+                alert(`Ошибка: ${error.message}`);
+            }
+        });
+
+        // Загрузка виджетов при открытии страницы
+        window.addEventListener('load', () => {
+            const widgets = JSON.parse(localStorage.getItem('weatherWidgets') || '[]');
+            widgets.forEach(data => {
+                renderWeatherWidget(data);
+            });
+        });
+    </script>
+</body>
+</html>
